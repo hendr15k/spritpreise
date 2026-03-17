@@ -25,6 +25,8 @@ h1{font-size:1.8rem;margin:0 0 8px}
 .btn:hover{background:var(--acc);color:#000}
 .btn.primary{background:var(--acc);color:#000;border-color:var(--acc)}
 .btn:disabled{opacity:.5;cursor:wait}
+.btn.share{background:rgba(81,207,102,.15);border-color:#51cf66;color:#51cf66}
+.btn.share:hover{background:#51cf66;color:#000}
 .station{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer;transition:background .2s}
 .station:hover{background:rgba(255,255,255,.03)}
 .station:last-child{border:none}
@@ -40,6 +42,8 @@ h1{font-size:1.8rem;margin:0 0 8px}
 .alert{background:rgba(81,207,102,.15);border:1px solid rgba(81,207,102,.4);border-radius:12px;padding:14px;margin:10px 0;display:none}
 .alert.show{display:block}
 .alert-title{color:#51cf66;font-weight:700;font-size:1.1rem}
+.alert.warn{background:rgba(255,107,107,.15);border-color:rgba(255,107,107,.4)}
+.alert.warn .alert-title{color:var(--up)}
 .calc-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;align-items:center}
 .calc-result{font-size:1.6rem;font-weight:700;color:var(--acc)}
 .last-update{color:var(--muted);font-size:.85rem}
@@ -49,6 +53,12 @@ h1{font-size:1.8rem;margin:0 0 8px}
 .info-label{color:var(--muted)}
 .attribution{color:var(--muted);font-size:.8rem;text-align:center;margin-top:16px}
 .attribution a{color:var(--acc);text-decoration:none}
+.threshold-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.threshold-row input[type=range]{flex:1;min-width:120px;accent-color:var(--down)}
+.threshold-val{font-weight:700;font-size:1.1rem;min-width:60px;text-align:center}
+.history-status{font-size:.75rem;color:var(--muted);margin-top:4px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#51cf66;color:#000;padding:10px 20px;border-radius:10px;font-weight:600;font-size:.9rem;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
 @media(max-width:768px){.grid{grid-template-columns:1fr 1fr}.station-prices{flex-direction:column;gap:2px}.map-wrap{height:250px}}
   </style>
 </head>
@@ -89,7 +99,22 @@ h1{font-size:1.8rem;margin:0 0 8px}
   <!-- Controls -->
   <div class="controls">
     <button class="btn primary" id="btnLocate" onclick="getLocation()">📍 Mein Standort</button>
-    <select id="fuelFilter" onchange="renderStations()">
+    <select id="citySelect" onchange="selectCity()">
+      <option value="">🏙️ Stadt wählen…</option>
+      <option value="52.52,13.405">Berlin</option>
+      <option value="53.551,9.993">Hamburg</option>
+      <option value="48.135,11.582">München</option>
+      <option value="50.938,6.957">Köln</option>
+      <option value="50.111,8.682">Frankfurt</option>
+      <option value="48.776,9.183">Stuttgart</option>
+      <option value="51.228,6.774">Düsseldorf</option>
+      <option value="51.514,7.465">Dortmund</option>
+      <option value="51.34,12.375">Leipzig</option>
+      <option value="51.05,13.738">Dresden</option>
+      <option value="52.376,9.74">Hannover</option>
+      <option value="53.079,8.802">Bremen</option>
+    </select>
+    <select id="fuelFilter" onchange="onFilterChange()">
       <option value="diesel">Diesel</option>
       <option value="e5">E5 Super</option>
       <option value="e10">E10</option>
@@ -105,6 +130,7 @@ h1{font-size:1.8rem;margin:0 0 8px}
       <option value="15">15 km</option>
       <option value="25">25 km</option>
     </select>
+    <button class="btn share" id="btnShare" onclick="shareCheapest()" title="Günstigste Station teilen">📤 Teilen</button>
     <span class="last-update" id="statusText">Bereit</span>
   </div>
 
@@ -118,6 +144,16 @@ h1{font-size:1.8rem;margin:0 0 8px}
   <div class="card">
     <h3>⛽ Tankstellen (<span id="stationCount">0</span>)</h3>
     <div id="stationList"><div style="text-align:center;color:var(--muted);padding:20px">📍 Standort → echte Preise laden</div></div>
+  </div>
+
+  <!-- Alarm Settings -->
+  <div class="card">
+    <h3>🔔 Preisalarm</h3>
+    <div class="threshold-row">
+      <span>Alarm bei unter</span>
+      <input type="range" id="alarmSlider" min="1.20" max="2.50" step="0.01" value="1.65" oninput="updateThreshold(this.value)">
+      <span class="threshold-val" id="alarmVal">1.65 €</span>
+    </div>
   </div>
 
   <!-- Calculator -->
@@ -138,6 +174,7 @@ h1{font-size:1.8rem;margin:0 0 8px}
   <!-- Chart -->
   <div class="card">
     <h3>📈 7-Tage-Trend</h3>
+    <div class="history-status" id="historyInfo">Sammle Daten… (0/7 Tage)</div>
     <canvas id="priceChart" height="180" style="max-height:220px"></canvas>
   </div>
 
@@ -154,27 +191,139 @@ h1{font-size:1.8rem;margin:0 0 8px}
     Daten: <a href="https://creativecommons.tankerkoenig.de" target="_blank">Tankerkönig</a> • Lizenz: <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a> • Kartendaten: © OpenStreetMap
   </div>
 
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
 <script>
 const API_KEY = '43b6d1db-4980-49b6-8492-49fd0d92e0fe';
 const PROXY = 'https://r.jina.ai/';
 let userLat = null, userLng = null, stations = [], map = null, markers = [];
 let national = {diesel:0, e5:0, e10:0}, prevNational = {};
-let historyLabels = [], historyDiesel = [], historyE5 = [], historyE10 = [];
 let chart = null, refreshTimer = null;
 
-// Init history labels
-(function() {
-  const now = new Date();
-  for(let i=6; i>=0; i--) {
-    const d = new Date(now); d.setDate(d.getDate()-i);
-    historyLabels.push(d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}));
-  }
-  historyDiesel = [null,null,null,null,null,null,null];
-  historyE5 = [null,null,null,null,null,null,null];
-  historyE10 = [null,null,null,null,null,null,null];
-})();
+// ========== V8: History via localStorage ==========
+const HISTORY_KEY = 'sprit_history';
+const LOCATION_KEY = 'sprit_location';
+const THRESHOLD_KEY = 'alarmThreshold';
+const HISTORY_DAYS = 7;
 
-// --- National Averages via Scrape ---
+function todayKey() {
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || {}; } catch(e) { return {}; }
+}
+
+function saveHistory(data) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(data));
+}
+
+function recordToday(diesel, e5, e10) {
+  if (!diesel && !e5 && !e10) return;
+  const hist = loadHistory();
+  const key = todayKey();
+  // Only record if not already recorded today, or if values changed
+  if (!hist[key] || hist[key].d !== diesel) {
+    hist[key] = { d: diesel, e5: e5, e10: e10 };
+    // Keep only last N days
+    const keys = Object.keys(hist).sort();
+    while (keys.length > HISTORY_DAYS) {
+      delete hist[keys.shift()];
+    }
+    saveHistory(hist);
+  }
+}
+
+function getChartData() {
+  const hist = loadHistory();
+  const labels = [], diesel = [], e5 = [], e10 = [];
+  const now = new Date();
+  for (let i = HISTORY_DAYS - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const label = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+    labels.push(label);
+    if (hist[key]) {
+      diesel.push(hist[key].d || null);
+      e5.push(hist[key].e5 || null);
+      e10.push(hist[key].e10 || null);
+    } else {
+      diesel.push(null);
+      e5.push(null);
+      e10.push(null);
+    }
+  }
+  const dataDays = Object.keys(hist).length;
+  return { labels, diesel, e5, e10, dataDays };
+}
+
+// ========== V8: Location persistence ==========
+function saveLocation(lat, lng) {
+  localStorage.setItem(LOCATION_KEY, JSON.stringify({ lat, lng, ts: Date.now() }));
+}
+
+function loadLocation() {
+  try {
+    const d = JSON.parse(localStorage.getItem(LOCATION_KEY));
+    // Valid for 24h
+    if (d && d.lat && d.lng && (Date.now() - d.ts < 86400000)) return d;
+  } catch(e) {}
+  return null;
+}
+
+// ========== V8: Alarm threshold UI ==========
+function loadThreshold() {
+  return parseFloat(localStorage.getItem(THRESHOLD_KEY)) || 1.65;
+}
+
+function updateThreshold(val) {
+  val = parseFloat(val);
+  localStorage.setItem(THRESHOLD_KEY, val);
+  document.getElementById('alarmVal').textContent = val.toFixed(2) + ' €';
+  checkAlarm();
+}
+
+function initThresholdUI() {
+  const val = loadThreshold();
+  const slider = document.getElementById('alarmSlider');
+  slider.value = val;
+  document.getElementById('alarmVal').textContent = val.toFixed(2) + ' €';
+}
+
+// ========== V8: Share ==========
+function shareCheapest() {
+  if (!stations.length) { showToast('Erst Stationen laden!'); return; }
+  const fuelType = document.getElementById('fuelFilter').value === 'all' ? 'diesel' : document.getElementById('fuelFilter').value;
+  let cheapest = null, cheapestP = 99;
+  stations.forEach(s => {
+    const p = s[fuelType] || 99;
+    if (p < cheapestP) { cheapestP = p; cheapest = s; }
+  });
+  if (!cheapest) { showToast('Keine Station gefunden'); return; }
+
+  const fuelLabel = fuelType === 'diesel' ? 'Diesel' : fuelType === 'e5' ? 'E5' : 'E10';
+  const text = `⛽ Günstigste ${fuelLabel}-Tankstelle:\n\n🏆 ${cheapest.name}\n📍 ${cheapest.street || ''} ${cheapest.houseNumber || ''}, ${cheapest.place || ''}\n💰 ${cheapestP.toFixed(3)} €/L\n📏 ${(cheapest.dist / 1000).toFixed(1)} km entfernt\n\n🗺️ https://maps.google.com/?q=${cheapest.lat},${cheapest.lng}`;
+
+  if (navigator.share) {
+    navigator.share({ title: 'Günstigste Tankstelle', text }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => showToast('📋 In Zwischenablage kopiert!'));
+  } else {
+    // Fallback: WhatsApp link
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ========== National Averages via Scrape ==========
 async function scrapeNational() {
   try {
     const res = await fetch(PROXY + 'https://www.tankerkoenig.de');
@@ -182,10 +331,11 @@ async function scrapeNational() {
     const dm = text.match(/Diesel\s*\n+\s*([\d.]+)/);
     const e5 = text.match(/Super\s*\n+\s*([\d.]+)/);
     const e10 = text.match(/Super E10\s*\n+\s*([\d.]+)/);
-    if(dm) national.diesel = parseFloat(dm[1]);
-    if(e5) national.e5 = parseFloat(e5[1]);
-    if(e10) national.e10 = parseFloat(e10[1]);
+    if (dm) national.diesel = parseFloat(dm[1]);
+    if (e5) national.e5 = parseFloat(e5[1]);
+    if (e10) national.e10 = parseFloat(e10[1]);
     updateNationalDisplay();
+    recordToday(national.diesel, national.e5, national.e10);
     updateChart();
   } catch(e) { console.error('National scrape fail:', e); }
 }
@@ -194,33 +344,43 @@ function updateNationalDisplay() {
   document.getElementById('avgDiesel').textContent = national.diesel ? national.diesel.toFixed(3) + ' €' : '--';
   document.getElementById('avgE5').textContent = national.e5 ? national.e5.toFixed(3) + ' €' : '--';
   document.getElementById('avgE10').textContent = national.e10 ? national.e10.toFixed(3) + ' €' : '--';
-  // Trends
-  if(prevNational.diesel) showTrend('Diesel', national.diesel, prevNational.diesel);
-  if(prevNational.e5) showTrend('E5', national.e5, prevNational.e5);
-  if(prevNational.e10) showTrend('E10', national.e10, prevNational.e10);
-  prevNational = {...national};
-  // History
-  historyDiesel[6] = national.diesel;
-  historyE5[6] = national.e5;
-  historyE10[6] = national.e10;
+  if (prevNational.diesel) showTrend('Diesel', national.diesel, prevNational.diesel);
+  if (prevNational.e5) showTrend('E5', national.e5, prevNational.e5);
+  if (prevNational.e10) showTrend('E10', national.e10, prevNational.e10);
+  prevNational = { ...national };
 }
 
 function showTrend(type, curr, prev) {
   const el = document.getElementById('trend' + type);
-  if(!el || !prev) return;
+  if (!el || !prev) return;
   const delta = (curr - prev) * 100;
-  if(Math.abs(delta) < 0.05) return;
+  if (Math.abs(delta) < 0.05) return;
   el.textContent = delta > 0 ? `↑ +${delta.toFixed(1)}ct` : `↓ ${delta.toFixed(1)}ct`;
   el.className = 'trend ' + (delta > 0 ? 'up' : 'down');
 }
 
-// --- Geolocation ---
+// ========== V8: City selection ==========
+function selectCity() {
+  const val = document.getElementById('citySelect').value;
+  if (!val) return;
+  const [lat, lng] = val.split(',').map(Number);
+  userLat = lat; userLng = lng;
+  saveLocation(lat, lng);
+  setStatus(`Stadt gewählt (${lat.toFixed(2)}, ${lng.toFixed(2)})`);
+  document.getElementById('btnLocate').textContent = '📍 ' + lat.toFixed(2) + '/' + lng.toFixed(2);
+  fetchStations();
+  initMap();
+}
+
+// ========== Geolocation ==========
 function getLocation() {
   const btn = document.getElementById('btnLocate');
   btn.disabled = true; btn.textContent = '📍 Suche…';
-  if(!navigator.geolocation) { setStatus('GPS nicht verfügbar'); btn.disabled=false; return; }
+  document.getElementById('citySelect').value = ''; // reset city
+  if (!navigator.geolocation) { setStatus('GPS nicht verfügbar'); btn.disabled = false; return; }
   navigator.geolocation.getCurrentPosition(pos => {
     userLat = pos.coords.latitude; userLng = pos.coords.longitude;
+    saveLocation(userLat, userLng);
     setStatus(`Pos: ${userLat.toFixed(3)}, ${userLng.toFixed(3)}`);
     btn.textContent = '📍 ' + userLat.toFixed(2) + '/' + userLng.toFixed(2);
     btn.disabled = false;
@@ -229,19 +389,19 @@ function getLocation() {
   }, err => {
     setStatus('GPS-Fehler: ' + err.message);
     btn.disabled = false; btn.textContent = '📍 Mein Standort';
-  }, {enableHighAccuracy:true, timeout:10000});
+  }, { enableHighAccuracy: true, timeout: 10000 });
 }
 
-// --- Fetch Stations (Tankerkönig API) ---
+// ========== Fetch Stations ==========
 async function fetchStations() {
-  if(!userLat || !userLng) return;
+  if (!userLat || !userLng) return;
   setStatus('Lade Preise…');
   const rad = document.getElementById('radius').value;
   const url = `https://creativecommons.tankerkoenig.de/json/list.php?lat=${userLat}&lng=${userLng}&rad=${rad}&sort=dist&type=all&apikey=${API_KEY}`;
   try {
     const res = await fetch(url);
     const data = await res.json();
-    if(data.ok) {
+    if (data.ok) {
       stations = data.stations.map(s => ({
         id: s.id, name: s.brand || s.name, brand: s.brand,
         street: s.street, place: s.place, houseNumber: s.houseNumber,
@@ -260,7 +420,6 @@ async function fetchStations() {
   } catch(e) {
     setStatus('Netzwerkfehler: ' + e.message);
   }
-  // Auto-refresh
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(fetchStations, 300000);
 }
@@ -269,70 +428,69 @@ function renderStations() {
   const fuelType = document.getElementById('fuelFilter').value;
   const sortBy = document.getElementById('sortBy').value;
   let list = [...stations];
-  // Sort
-  if(sortBy === 'price') {
-    list.sort((a,b) => {
-      const pa = fuelType === 'all' ? Math.min(a.diesel||99,a.e5||99,a.e10||99) : (a[fuelType]||99);
-      const pb = fuelType === 'all' ? Math.min(b.diesel||99,b.e5||99,b.e10||99) : (b[fuelType]||99);
+  if (sortBy === 'price') {
+    list.sort((a, b) => {
+      const pa = fuelType === 'all' ? Math.min(a.diesel || 99, a.e5 || 99, a.e10 || 99) : (a[fuelType] || 99);
+      const pb = fuelType === 'all' ? Math.min(b.diesel || 99, b.e5 || 99, b.e10 || 99) : (b[fuelType] || 99);
       return pa - pb;
     });
   } else {
-    list.sort((a,b) => a.dist - b.dist);
+    list.sort((a, b) => a.dist - b.dist);
   }
-  // Find cheapest
   let cheapestPrice = 99;
   list.forEach(s => {
-    const p = fuelType === 'all' ? Math.min(s.diesel||99,s.e5||99,s.e10||99) : (s[fuelType]||99);
-    if(p < cheapestPrice) cheapestPrice = p;
+    const p = fuelType === 'all' ? Math.min(s.diesel || 99, s.e5 || 99, s.e10 || 99) : (s[fuelType] || 99);
+    if (p < cheapestPrice) cheapestPrice = p;
   });
   const html = list.map(s => {
     const isCheap = fuelType !== 'all' && s[fuelType] === cheapestPrice;
     return `<div class="station" onclick="focusStation(${s.lat},${s.lng})">
       <div>
         <div class="station-name">${isCheap ? '🏆 ' : ''}${s.name}</div>
-        <div class="station-addr">${s.street||''} ${s.houseNumber||''}, ${s.place||''} • ${(s.dist/1000).toFixed(1)}km ${s.isOpen?'🟢':'🔴'}</div>
+        <div class="station-addr">${s.street || ''} ${s.houseNumber || ''}, ${s.place || ''} • ${(s.dist / 1000).toFixed(1)}km ${s.isOpen ? '🟢' : '🔴'}</div>
       </div>
       <div class="station-prices">
-        ${s.diesel ? `<span class="${fuelType==='diesel'&&isCheap?'cheapest':''}">${s.diesel.toFixed(3)}€ D</span>` : ''}
-        ${s.e5 ? `<span class="${fuelType==='e5'&&isCheap?'cheapest':''}">${s.e5.toFixed(3)}€ E5</span>` : ''}
-        ${s.e10 ? `<span class="${fuelType==='e10'&&isCheap?'cheapest':''}">${s.e10.toFixed(3)}€ E10</span>` : ''}
+        ${s.diesel ? `<span class="${fuelType === 'diesel' && isCheap ? 'cheapest' : ''}">${s.diesel.toFixed(3)}€ D</span>` : ''}
+        ${s.e5 ? `<span class="${fuelType === 'e5' && isCheap ? 'cheapest' : ''}">${s.e5.toFixed(3)}€ E5</span>` : ''}
+        ${s.e10 ? `<span class="${fuelType === 'e10' && isCheap ? 'cheapest' : ''}">${s.e10.toFixed(3)}€ E10</span>` : ''}
       </div>
     </div>`;
   }).join('');
   document.getElementById('stationList').innerHTML = html || '<div style="text-align:center;color:var(--muted);padding:20px">Keine Stationen gefunden</div>';
   document.getElementById('stationCount').textContent = list.length;
-  // Calc
   calcUpdate();
 }
 
 function updateCheapest() {
-  if(!stations.length) return;
+  if (!stations.length) return;
   const fuelType = document.getElementById('fuelFilter').value;
   let cheapest = stations[0], cheapestP = 99;
   stations.forEach(s => {
-    const p = fuelType === 'all' ? Math.min(s.diesel||99,s.e5||99,s.e10||99) : (s[fuelType]||99);
-    if(p < cheapestP) { cheapestP = p; cheapest = s; }
+    const p = fuelType === 'all' ? Math.min(s.diesel || 99, s.e5 || 99, s.e10 || 99) : (s[fuelType] || 99);
+    if (p < cheapestP) { cheapestP = p; cheapest = s; }
   });
   document.getElementById('cheapestPrice').textContent = cheapestP.toFixed(3) + ' €';
-  document.getElementById('cheapestName').textContent = cheapest.name + ' (' + (cheapest.dist/1000).toFixed(1) + 'km)';
+  document.getElementById('cheapestName').textContent = cheapest.name + ' (' + (cheapest.dist / 1000).toFixed(1) + 'km)';
 }
 
 function checkAlarm() {
   const fuelType = document.getElementById('fuelFilter').value === 'all' ? 'diesel' : document.getElementById('fuelFilter').value;
-  const threshold = parseFloat(localStorage.getItem('alarmThreshold')) || 1.65;
-  const cheap = stations.filter(s => s[fuelType] && s[fuelType] < threshold).sort((a,b) => a[fuelType] - b[fuelType]);
-  if(cheap.length) {
+  const threshold = loadThreshold();
+  const cheap = stations.filter(s => s[fuelType] && s[fuelType] < threshold).sort((a, b) => a[fuelType] - b[fuelType]);
+  if (cheap.length) {
     const best = cheap[0];
-    document.getElementById('alarmDetails').innerHTML = `${fuelType.toUpperCase()} ${best[fuelType].toFixed(3)}€ bei <b>${best.name}</b> (${(best.dist/1000).toFixed(1)}km)`;
-    document.getElementById('alarmBox').classList.add('show');
+    const savings = ((threshold - best[fuelType]) * 50).toFixed(2); // savings per 50L
+    document.getElementById('alarmDetails').innerHTML =
+      `${fuelType.toUpperCase()} <b>${best[fuelType].toFixed(3)}€</b> bei <b>${best.name}</b> (${(best.dist / 1000).toFixed(1)}km) — sparst ~${savings}€ pro 50L`;
+    document.getElementById('alarmBox').className = 'alert show';
   } else {
-    document.getElementById('alarmBox').classList.remove('show');
+    document.getElementById('alarmBox').className = 'alert';
   }
 }
 
-// --- Map ---
+// ========== Map ==========
 function initMap() {
-  if(map) return;
+  if (map) { map.setView([userLat, userLng], 12); return; }
   map = L.map('map').setView([userLat, userLng], 12);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap', maxZoom: 18
@@ -341,97 +499,115 @@ function initMap() {
 }
 
 function updateMap() {
-  if(!map) return;
+  if (!map) return;
   markers.forEach(m => map.removeLayer(m));
   markers = [];
   const fuelType = document.getElementById('fuelFilter').value;
   let cheapestP = 99;
   stations.forEach(s => {
-    const p = fuelType === 'all' ? Math.min(s.diesel||99,s.e5||99,s.e10||99) : (s[fuelType]||99);
-    if(p < cheapestP) cheapestP = p;
+    const p = fuelType === 'all' ? Math.min(s.diesel || 99, s.e5 || 99, s.e10 || 99) : (s[fuelType] || 99);
+    if (p < cheapestP) cheapestP = p;
   });
   stations.forEach(s => {
-    const p = fuelType === 'all' ? Math.min(s.diesel||99,s.e5||99,s.e10||99) : (s[fuelType]||99);
+    const p = fuelType === 'all' ? Math.min(s.diesel || 99, s.e5 || 99, s.e10 || 99) : (s[fuelType] || 99);
     const isCheap = p === cheapestP;
     const icon = L.divIcon({
       className: '',
-      html: `<div style="background:${isCheap?'#51cf66':'#223055'};color:${isCheap?'#000':'#eaf0ff'};border-radius:50%;width:${isCheap?30:24}px;height:${isCheap?30:24}px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.7rem;border:2px solid ${isCheap?'#fff':'#6ea8ff'}">${p.toFixed(2)}</div>`,
-      iconSize: [isCheap?30:24, isCheap?30:24]
+      html: `<div style="background:${isCheap ? '#51cf66' : '#223055'};color:${isCheap ? '#000' : '#eaf0ff'};border-radius:50%;width:${isCheap ? 30 : 24}px;height:${isCheap ? 30 : 24}px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.7rem;border:2px solid ${isCheap ? '#fff' : '#6ea8ff'}">${p.toFixed(2)}</div>`,
+      iconSize: [isCheap ? 30 : 24, isCheap ? 30 : 24]
     });
-    const m = L.marker([s.lat, s.lng], {icon}).addTo(map);
-    m.bindPopup(`<b>${s.name}</b><br>${s.street||''} ${s.houseNumber||''}<br>D: ${s.diesel?s.diesel.toFixed(3)+'€':'-'} | E5: ${s.e5?s.e5.toFixed(3)+'€':'-'}<br>${s.isOpen?'🟢 Geöffnet':'🔴 Geschlossen'}`);
+    const m = L.marker([s.lat, s.lng], { icon }).addTo(map);
+    m.bindPopup(`<b>${s.name}</b><br>${s.street || ''} ${s.houseNumber || ''}<br>D: ${s.diesel ? s.diesel.toFixed(3) + '€' : '-'} | E5: ${s.e5 ? s.e5.toFixed(3) + '€' : '-'}<br>${s.isOpen ? '🟢 Geöffnet' : '🔴 Geschlossen'}`);
     markers.push(m);
   });
 }
 
 function focusStation(lat, lng) {
-  if(!map) initMap();
+  if (!map) initMap();
   map.setView([lat, lng], 15);
 }
 
-// --- Calculator ---
+// ========== Calculator ==========
 function calcUpdate() {
   const fuel = document.getElementById('calcFuel').value;
   const liters = parseFloat(document.getElementById('calcLiters').value) || 0;
   const priceInput = document.getElementById('calcPrice').value;
   let price = priceInput ? parseFloat(priceInput) : 0;
-  if(!price) {
-    // Use cheapest station price or national average
-    if(stations.length) {
-      const cheapest = Math.min(...stations.map(s => s[fuel]||99).filter(p=>p<99));
-      if(cheapest < 99) price = cheapest;
+  if (!price) {
+    if (stations.length) {
+      const cheapest = Math.min(...stations.map(s => s[fuel] || 99).filter(p => p < 99));
+      if (cheapest < 99) price = cheapest;
     }
-    if(!price && national[fuel]) price = national[fuel];
+    if (!price && national[fuel]) price = national[fuel];
   }
   document.getElementById('calcTotal').textContent = price ? (liters * price).toFixed(2) + ' €' : '-- €';
-  if(!priceInput) document.getElementById('calcPrice').placeholder = price ? price.toFixed(3) + ' €/L' : '€/L';
+  if (!priceInput) document.getElementById('calcPrice').placeholder = price ? price.toFixed(3) + ' €/L' : '€/L';
 }
 
-// --- Chart ---
+// ========== Chart ==========
 function updateChart() {
+  const { labels, diesel, e5, e10, dataDays } = getChartData();
+  document.getElementById('historyInfo').textContent =
+    dataDays > 0 ? `Sammle Daten… (${dataDays}/${HISTORY_DAYS} Tage)` : 'Sammle Daten… (0/7 Tage)';
+
   const ctx = document.getElementById('priceChart').getContext('2d');
-  if(chart) chart.destroy();
+  if (chart) chart.destroy();
   chart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: historyLabels,
+      labels,
       datasets: [
-        {label:'Diesel',data:historyDiesel,borderColor:'#51cf66',backgroundColor:'rgba(81,207,102,.08)',fill:true,tension:.3,spanGaps:true},
-        {label:'E5',data:historyE5,borderColor:'#ff6b6b',backgroundColor:'rgba(255,107,107,.08)',fill:true,tension:.3,spanGaps:true},
-        {label:'E10',data:historyE10,borderColor:'#6ea8ff',backgroundColor:'rgba(110,168,255,.08)',fill:true,tension:.3,spanGaps:true}
+        { label: 'Diesel', data: diesel, borderColor: '#51cf66', backgroundColor: 'rgba(81,207,102,.08)', fill: true, tension: .3, spanGaps: true },
+        { label: 'E5', data: e5, borderColor: '#ff6b6b', backgroundColor: 'rgba(255,107,107,.08)', fill: true, tension: .3, spanGaps: true },
+        { label: 'E10', data: e10, borderColor: '#6ea8ff', backgroundColor: 'rgba(110,168,255,.08)', fill: true, tension: .3, spanGaps: true }
       ]
     },
     options: {
-      responsive:true,
+      responsive: true,
       scales: {
-        y:{beginAtZero:false,ticks:{color:'#a9b7d9'},grid:{color:'rgba(255,255,255,.05)'}},
-        x:{ticks:{color:'#a9b7d9'},grid:{color:'rgba(255,255,255,.05)'}}
+        y: { beginAtZero: false, ticks: { color: '#a9b7d9' }, grid: { color: 'rgba(255,255,255,.05)' } },
+        x: { ticks: { color: '#a9b7d9' }, grid: { color: 'rgba(255,255,255,.05)' } }
       },
-      plugins:{legend:{labels:{color:'#eaf0ff'}}}
+      plugins: { legend: { labels: { color: '#eaf0ff' } } }
     }
   });
 }
 
 function setStatus(msg) { document.getElementById('statusText').textContent = msg; }
 
-// Events
+function onFilterChange() {
+  renderStations();
+  updateMap();
+  updateCheapest();
+  checkAlarm();
+}
+
+// ========== Events ==========
 document.getElementById('calcFuel').onchange = calcUpdate;
 document.getElementById('calcLiters').oninput = calcUpdate;
 document.getElementById('calcPrice').oninput = calcUpdate;
-document.getElementById('fuelFilter').addEventListener('change', () => { renderStations(); updateMap(); updateCheapest(); });
+document.getElementById('fuelFilter').addEventListener('change', onFilterChange);
 
-// Start
-scrapeNational();
-calcUpdate();
-updateChart();
-setInterval(scrapeNational, 300000);
+// ========== Start ==========
+(function init() {
+  initThresholdUI();
+  updateChart();
 
-// Auto-geolocate if previously allowed
-if(navigator.permissions) {
-  navigator.permissions.query({name:'geolocation'}).then(p => {
-    if(p.state === 'granted') getLocation();
-  });
-}
+  // Restore last location
+  const lastLoc = loadLocation();
+  if (lastLoc) {
+    userLat = lastLoc.lat;
+    userLng = lastLoc.lng;
+    setStatus(`Gespeicherter Standort geladen (${userLat.toFixed(2)}, ${userLng.toFixed(2)})`);
+    document.getElementById('btnLocate').textContent = '📍 ' + userLat.toFixed(2) + '/' + userLng.toFixed(2);
+    fetchStations();
+    initMap();
+  }
+
+  scrapeNational();
+  calcUpdate();
+  setInterval(scrapeNational, 300000);
+})();
 </script>
 </body>
 </html>
