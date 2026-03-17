@@ -474,6 +474,7 @@ function updateCheapest() {
 }
 
 function checkAlarm() {
+  if (!stations.length) return;
   const fuelType = document.getElementById('fuelFilter').value === 'all' ? 'diesel' : document.getElementById('fuelFilter').value;
   const threshold = loadThreshold();
   const cheap = stations.filter(s => s[fuelType] && s[fuelType] < threshold).sort((a, b) => a[fuelType] - b[fuelType]);
@@ -575,6 +576,19 @@ function updateChart() {
 }
 
 function setStatus(msg) { document.getElementById('statusText').textContent = msg; }
+
+// ========== Error Handling ==========
+// Catch external errors (browser extensions, etc.) — don't show in UI
+window.addEventListener('error', e => {
+  console.warn('Suppressed error:', e.message);
+  // Hide alarm if it was triggered by an external error (not our code)
+  const box = document.getElementById('alarmBox');
+  const details = document.getElementById('alarmDetails');
+  if (details && details.textContent.includes('createTreeWalker')) {
+    box.className = 'alert'; // hide
+  }
+  return true; // prevent default
+});
 
 function onFilterChange() {
   renderStations();
