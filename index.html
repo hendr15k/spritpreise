@@ -151,7 +151,7 @@ h1{font-size:1.8rem;margin:0 0 8px}
     <h3>🔔 Preisalarm</h3>
     <div class="threshold-row">
       <span>Alarm bei unter</span>
-      <input type="range" id="alarmSlider" min="1.20" max="2.50" step="0.01" value="1.65" oninput="updateThreshold(this.value)">
+      <input type="range" id="alarmSlider" min="120" max="250" step="1" value="165" oninput="updateThreshold(this.value/100)">
       <span class="threshold-val" id="alarmVal">1.65 €</span>
     </div>
   </div>
@@ -288,7 +288,7 @@ function updateThreshold(val) {
 function initThresholdUI() {
   const val = loadThreshold();
   const slider = document.getElementById('alarmSlider');
-  slider.value = val;
+  slider.value = Math.round(val * 100);
   document.getElementById('alarmVal').textContent = val.toFixed(2) + ' €';
 }
 
@@ -548,7 +548,8 @@ function calcUpdate() {
 function updateChart() {
   const { labels, diesel, e5, e10, dataDays } = getChartData();
   document.getElementById('historyInfo').textContent =
-    dataDays > 0 ? `Sammle Daten… (${dataDays}/${HISTORY_DAYS} Tage)` : 'Sammle Daten… (0/7 Tage)';
+    dataDays >= HISTORY_DAYS ? `✅ ${dataDays}/${HISTORY_DAYS} Tage gesammelt` :
+    dataDays > 0 ? `📊 ${dataDays}/${HISTORY_DAYS} Tage gesammelt` : 'Sammle Daten… (0/7 Tage)';
 
   const ctx = document.getElementById('priceChart').getContext('2d');
   if (chart) chart.destroy();
@@ -586,7 +587,7 @@ function onFilterChange() {
 document.getElementById('calcFuel').onchange = calcUpdate;
 document.getElementById('calcLiters').oninput = calcUpdate;
 document.getElementById('calcPrice').oninput = calcUpdate;
-document.getElementById('fuelFilter').addEventListener('change', onFilterChange);
+// NOTE: onFilterChange is already wired via inline onchange on the <select>
 
 // ========== Start ==========
 (function init() {
@@ -600,6 +601,15 @@ document.getElementById('fuelFilter').addEventListener('change', onFilterChange)
     userLng = lastLoc.lng;
     setStatus(`Gespeicherter Standort geladen (${userLat.toFixed(2)}, ${userLng.toFixed(2)})`);
     document.getElementById('btnLocate').textContent = '📍 ' + userLat.toFixed(2) + '/' + userLng.toFixed(2);
+    // Sync city dropdown if coords match a known city
+    const cityOpts = document.getElementById('citySelect').options;
+    for (let i = 1; i < cityOpts.length; i++) {
+      const [clat, clng] = cityOpts[i].value.split(',').map(Number);
+      if (Math.abs(clat - userLat) < 0.01 && Math.abs(clng - userLng) < 0.01) {
+        document.getElementById('citySelect').selectedIndex = i;
+        break;
+      }
+    }
     fetchStations();
     initMap();
   }
