@@ -8,9 +8,10 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-:root{--bg:#0b1020;--card:#121a30;--text:#eaf0ff;--muted:#a9b7d9;--acc:#6ea8ff;--up:#ff6b6b;--down:#51cf66;--line:rgba(255,255,255,.12)}
+:root{--bg:#0b1020;--card:#121a30;--text:#eaf0ff;--muted:#a9b7d9;--acc:#6ea8ff;--up:#ff6b6b;--down:#51cf66;--line:rgba(255,255,255,.12);--bg-grad:linear-gradient(180deg,#0a0f1d,#111a2f);--btn-bg:#223055}
+:root.light-mode{--bg:#f8f9fa;--card:#ffffff;--text:#212529;--muted:#6c757d;--acc:#0d6efd;--up:#dc3545;--down:#198754;--line:rgba(0,0,0,.12);--bg-grad:linear-gradient(180deg,#f8f9fa,#e9ecef);--btn-bg:#e9ecef}
 *{box-sizing:border-box}
-body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(180deg,#0a0f1d,#111a2f);color:var(--text);line-height:1.6;padding:20px;max-width:1200px;margin:auto}
+body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:var(--bg-grad);color:var(--text);line-height:1.6;padding:20px;max-width:1200px;margin:auto;transition:background .3s,color .3s}
 h1{font-size:1.8rem;margin:0 0 8px}
 .sub{color:var(--muted);margin:0 0 16px;font-size:1rem}
 .live{display:inline-block;background:#51cf66;color:#000;padding:2px 10px;border-radius:20px;font-size:.75rem;font-weight:700;animation:pulse 2s infinite}
@@ -21,7 +22,7 @@ h1{font-size:1.8rem;margin:0 0 8px}
 .price{font-size:1.8rem;font-weight:700}
 .trend{font-size:.85rem;margin-top:2px}
 .up{color:var(--up)}.down{color:var(--down)}
-.btn{background:#223055;border:1px solid var(--acc);border-radius:10px;padding:10px 16px;cursor:pointer;color:var(--text);font-size:.95rem;transition:all .2s;margin:4px}
+.btn{background:var(--btn-bg);border:1px solid var(--acc);border-radius:10px;padding:10px 16px;cursor:pointer;color:var(--text);font-size:16px;transition:all .2s;margin:4px;min-height:44px}
 .btn:hover{background:var(--acc);color:#000}
 .btn.primary{background:var(--acc);color:#000;border-color:var(--acc)}
 .btn:disabled{opacity:.5;cursor:wait}
@@ -38,7 +39,8 @@ h1{font-size:1.8rem;margin:0 0 8px}
 .map-wrap{height:350px;border-radius:14px;overflow:hidden;margin:10px 0;border:1px solid var(--line)}
 #map{height:100%;width:100%}
 .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
-.controls select,.controls input{background:#0f1730;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:.9rem}
+.controls select,.controls input{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:16px;min-height:44px}
+.theme-btn{position:absolute;top:10px;right:10px;padding:6px 10px;font-size:1.2rem;min-height:auto;z-index:1000}
 .alert{background:rgba(81,207,102,.15);border:1px solid rgba(81,207,102,.4);border-radius:12px;padding:14px;margin:10px 0;display:none}
 .alert.show{display:block}
 .alert-title{color:#51cf66;font-weight:700;font-size:1.1rem}
@@ -63,6 +65,7 @@ h1{font-size:1.8rem;margin:0 0 8px}
   </style>
 </head>
 <body>
+  <button id="themeToggle" class="btn theme-btn" onclick="toggleTheme()" aria-label="Dark/Light Mode umschalten">🌗</button>
   <h1>🛢️ Spritpreise Deutschland <span class="live">● LIVE</span></h1>
   <p class="sub">Echte Preise via Tankerkönig API • Standortbasiert • Kein Abo nötig</p>
 
@@ -99,21 +102,10 @@ h1{font-size:1.8rem;margin:0 0 8px}
   <!-- Controls -->
   <div class="controls">
     <button class="btn primary" id="btnLocate" onclick="getLocation()">📍 Mein Standort</button>
-    <select id="citySelect" onchange="selectCity()">
-      <option value="">🏙️ Stadt wählen…</option>
-      <option value="52.52,13.405">Berlin</option>
-      <option value="53.551,9.993">Hamburg</option>
-      <option value="48.135,11.582">München</option>
-      <option value="50.938,6.957">Köln</option>
-      <option value="50.111,8.682">Frankfurt</option>
-      <option value="48.776,9.183">Stuttgart</option>
-      <option value="51.228,6.774">Düsseldorf</option>
-      <option value="51.514,7.465">Dortmund</option>
-      <option value="51.34,12.375">Leipzig</option>
-      <option value="51.05,13.738">Dresden</option>
-      <option value="52.376,9.74">Hannover</option>
-      <option value="53.079,8.802">Bremen</option>
-    </select>
+    <div style="display:flex;gap:4px;">
+      <input type="text" id="cityInput" placeholder="🏙️ Stadt suchen..." onkeypress="if(event.key==='Enter') searchCity()">
+      <button class="btn" onclick="searchCity()">🔍</button>
+    </div>
     <select id="fuelFilter" onchange="onFilterChange()">
       <option value="diesel">Diesel</option>
       <option value="e5">E5 Super</option>
@@ -200,6 +192,7 @@ const PROXY = 'https://r.jina.ai/';
 let userLat = null, userLng = null, stations = [], map = null, markers = [];
 let national = {diesel:0, e5:0, e10:0}, prevNational = {};
 let chart = null, refreshTimer = null;
+let lastAlarmStationId = null;
 
 // ========== V8: History via localStorage ==========
 const HISTORY_KEY = 'sprit_history';
@@ -360,23 +353,34 @@ function showTrend(type, curr, prev) {
 }
 
 // ========== V8: City selection ==========
-function selectCity() {
-  const val = document.getElementById('citySelect').value;
-  if (!val) return;
-  const [lat, lng] = val.split(',').map(Number);
-  userLat = lat; userLng = lng;
-  saveLocation(lat, lng);
-  setStatus(`Stadt gewählt (${lat.toFixed(2)}, ${lng.toFixed(2)})`);
-  document.getElementById('btnLocate').textContent = '📍 ' + lat.toFixed(2) + '/' + lng.toFixed(2);
-  fetchStations();
-  initMap();
+async function searchCity() {
+  const query = document.getElementById('cityInput').value.trim();
+  if (!query) return;
+  setStatus('Suche Stadt…');
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`);
+    const data = await res.json();
+    if (data && data.length > 0) {
+      userLat = parseFloat(data[0].lat);
+      userLng = parseFloat(data[0].lon);
+      saveLocation(userLat, userLng);
+      setStatus(`Stadt gefunden (${userLat.toFixed(2)}, ${userLng.toFixed(2)})`);
+      document.getElementById('btnLocate').textContent = '📍 ' + userLat.toFixed(2) + '/' + userLng.toFixed(2);
+      fetchStations();
+      initMap();
+    } else {
+      setStatus('Stadt nicht gefunden');
+    }
+  } catch (e) {
+    setStatus('Fehler bei Stadtsuche');
+  }
 }
 
 // ========== Geolocation ==========
 function getLocation() {
   const btn = document.getElementById('btnLocate');
   btn.disabled = true; btn.textContent = '📍 Suche…';
-  document.getElementById('citySelect').value = ''; // reset city
+  document.getElementById('cityInput').value = ''; // reset city
   if (!navigator.geolocation) { setStatus('GPS nicht verfügbar'); btn.disabled = false; return; }
   navigator.geolocation.getCurrentPosition(pos => {
     userLat = pos.coords.latitude; userLng = pos.coords.longitude;
@@ -484,8 +488,13 @@ function checkAlarm() {
     document.getElementById('alarmDetails').innerHTML =
       `${fuelType.toUpperCase()} <b>${best[fuelType].toFixed(3)}€</b> bei <b>${best.name}</b> (${(best.dist / 1000).toFixed(1)}km) — sparst ~${savings}€ pro 50L`;
     document.getElementById('alarmBox').className = 'alert show';
+    if (best.id !== lastAlarmStationId) {
+      lastAlarmStationId = best.id;
+      showToast(`🚨 Günstig gefunden: ${best[fuelType].toFixed(3)}€ bei ${best.name}`);
+    }
   } else {
     document.getElementById('alarmBox').className = 'alert';
+    lastAlarmStationId = null;
   }
 }
 
@@ -567,15 +576,23 @@ function updateChart() {
     options: {
       responsive: true,
       scales: {
-        y: { beginAtZero: false, ticks: { color: '#a9b7d9' }, grid: { color: 'rgba(255,255,255,.05)' } },
-        x: { ticks: { color: '#a9b7d9' }, grid: { color: 'rgba(255,255,255,.05)' } }
+        y: { beginAtZero: false, ticks: { color: document.documentElement.classList.contains('light-mode') ? '#6c757d' : '#a9b7d9' }, grid: { color: document.documentElement.classList.contains('light-mode') ? 'rgba(0,0,0,.05)' : 'rgba(255,255,255,.05)' } },
+        x: { ticks: { color: document.documentElement.classList.contains('light-mode') ? '#6c757d' : '#a9b7d9' }, grid: { color: document.documentElement.classList.contains('light-mode') ? 'rgba(0,0,0,.05)' : 'rgba(255,255,255,.05)' } }
       },
-      plugins: { legend: { labels: { color: '#eaf0ff' } } }
+      plugins: { legend: { labels: { color: document.documentElement.classList.contains('light-mode') ? '#212529' : '#eaf0ff' } } }
     }
   });
 }
 
 function setStatus(msg) { document.getElementById('statusText').textContent = msg; }
+
+// ========== Dark/Light Mode ==========
+function toggleTheme() {
+  const root = document.documentElement;
+  const isLight = root.classList.toggle('light-mode');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  updateChart(); // Redraw chart with new theme colors
+}
 
 // ========== Error Handling ==========
 // Catch external errors (browser extensions, etc.) — don't show in UI
@@ -605,6 +622,9 @@ document.getElementById('calcPrice').oninput = calcUpdate;
 
 // ========== Start ==========
 (function init() {
+  if (localStorage.getItem('theme') === 'light') {
+    document.documentElement.classList.add('light-mode');
+  }
   initThresholdUI();
   updateChart();
 
@@ -615,15 +635,6 @@ document.getElementById('calcPrice').oninput = calcUpdate;
     userLng = lastLoc.lng;
     setStatus(`Gespeicherter Standort geladen (${userLat.toFixed(2)}, ${userLng.toFixed(2)})`);
     document.getElementById('btnLocate').textContent = '📍 ' + userLat.toFixed(2) + '/' + userLng.toFixed(2);
-    // Sync city dropdown if coords match a known city
-    const cityOpts = document.getElementById('citySelect').options;
-    for (let i = 1; i < cityOpts.length; i++) {
-      const [clat, clng] = cityOpts[i].value.split(',').map(Number);
-      if (Math.abs(clat - userLat) < 0.01 && Math.abs(clng - userLng) < 0.01) {
-        document.getElementById('citySelect').selectedIndex = i;
-        break;
-      }
-    }
     fetchStations();
     initMap();
   }
