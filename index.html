@@ -4,6 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Spritpreise DE 🇩🇪 – Echte Live-Preise!</title>
+  <meta name="description" content="Aktuelle Spritpreise für Deutschland in Echtzeit. Standortbasiert mit Preisalarm, Karte und 7-Tage-Trend.">
+  <meta name="og:title" content="Spritpreise Deutschland 🇩🇪">
+  <meta name="og:description" content="Live-Tankstellenpreise via Tankerkönig API – mit Preisalarm, Karte und Trendverlauf.">
+  <meta name="og:type" content="website">
+  <meta name="og:url" content="https://hendr15k.github.io/spritpreise/">
+  <meta name="twitter:card" content="summary">
+  <meta name="theme-color" content="#0a0f1d">
+  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -170,17 +178,15 @@ h1{font-size:1.8rem;margin:0 0 8px}
     <canvas id="priceChart" height="180" style="max-height:220px"></canvas>
   </div>
 
-  <!-- Info -->
+  <!-- Last Updated -->
   <div class="card">
-    <h3>🔮 Tipps</h3>
-    <div class="info-row"><span class="info-label">Günstigster Tag</span><span>Freitag/Samstag</span></div>
-    <div class="info-row"><span class="info-label">Teurer</span><span>Di-Do (+3-5ct)</span></div>
-    <div class="info-row"><span class="info-label">Refresh</span><span>Alle 5 Min automatisch</span></div>
-    <div class="info-row"><span class="info-label">API-Limit</span><span>5.000 Abrufe/Tag (reichlich)</span></div>
+    <h3>🕐 Zuletzt aktualisiert</h3>
+    <div class="info-row"><span class="info-label">National</span><span id="lastNatUpdate">--</span></div>
+    <div class="info-row"><span class="info-label">Tankstellen</span><span id="lastStatUpdate">--</span></div>
   </div>
 
   <div class="attribution">
-    Daten: <a href="https://creativecommons.tankerkoenig.de" target="_blank">Tankerkönig</a> • Lizenz: <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a> • Kartendaten: © OpenStreetMap
+    Daten: <a href="https://creativecommons.tankerkoenig.de" target="_blank">Tankerkönig</a> • Lizenz: <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a> • Kartendaten: © OpenStreetMap • <a href="https://github.com/hendr15k/spritpreise" target="_blank">Quellcode</a>
   </div>
 
   <!-- Toast -->
@@ -190,11 +196,33 @@ h1{font-size:1.8rem;margin:0 0 8px}
 const API_KEY = '43b6d1db-4980-49b6-8492-49fd0d92e0fe';
 const PROXY = 'https://r.jina.ai/';
 let userLat = null, userLng = null, stations = [], map = null, markers = [];
-let national = {diesel:0, e5:0, e10:0}, prevNational = {};
+let national = {diesel: 0, e5: 0, e10: 0}, prevNational = {};
 let chart = null, refreshTimer = null;
 let lastAlarmStationId = null;
 
-// ========== V8: History via localStorage ==========
+// ========== V10: Service Worker ==========
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/spritpreise/sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.warn('SW register failed:', err));
+  });
+}
+
+// ========== V10: Timestamp helpers ==========
+function nowStr() {
+  return new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
+}
+
+function updateNatTimestamp() {
+  document.getElementById('lastNatUpdate').textContent = nowStr();
+}
+
+function updateStatTimestamp() {
+  document.getElementById('lastStatUpdate').textContent = nowStr();
+}
+
+// ========== V10: History via localStorage ==========
 const HISTORY_KEY = 'sprit_history';
 const LOCATION_KEY = 'sprit_location';
 const THRESHOLD_KEY = 'alarmThreshold';
@@ -321,15 +349,18 @@ async function scrapeNational() {
   try {
     const res = await fetch(PROXY + 'https://www.tankerkoenig.de');
     const text = await res.text();
-    const dm = text.match(/Diesel\s*\n+\s*([\d.]+)/);
-    const e5 = text.match(/Super\s*\n+\s*([\d.]+)/);
-    const e10 = text.match(/Super E10\s*\n+\s*([\d.]+)/);
+    // Numbers appear BEFORE labels in Jina output
+    // Pattern: "## 2.397\n\nDiesel" or "## 2.210\n\nSuper" or "## 2.156\n\nSuper E10"
+    let dm = text.match(/([12]\.\d{3})\s*\n+\s*Diesel/);
+    let e10 = text.match(/([12]\.\d{3})\s*\n+\s*Super E10/);
+    let e5 = text.match(/([12]\.\d{3})\s*\n+\s*Super\s*\n/);
     if (dm) national.diesel = parseFloat(dm[1]);
     if (e5) national.e5 = parseFloat(e5[1]);
     if (e10) national.e10 = parseFloat(e10[1]);
     updateNationalDisplay();
     recordToday(national.diesel, national.e5, national.e10);
     updateChart();
+    updateNatTimestamp();
   } catch(e) { console.error('National scrape fail:', e); }
 }
 
