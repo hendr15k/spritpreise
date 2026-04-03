@@ -2,6 +2,8 @@
 
 Live-Spritpreise und Preisprognose für Deutschland. Zeigt aktuelle Tankstellenpreise auf einer Karte mit Filterung nach Kraftstoffart (E5, E10, Diesel) und Entfernung.
 
+**v10 (03.04.2026):** SEO Meta-Tags, Service-Worker-PWA, National-Scrape-Fix, Aktualisierungs-Timestamps, GitHub-Link
+
 **[Live Demo →](https://hendr15k.github.io/spritpreise/)**
 
 ## Features
