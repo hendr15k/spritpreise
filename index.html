@@ -345,23 +345,47 @@ function showToast(msg) {
 }
 
 // ========== National Averages via Scrape ==========
+function extractNationalPrice(text, labelPatterns) {
+  for (const pattern of labelPatterns) {
+    const match = text.match(pattern);
+    if (match) return parseFloat(match[1]);
+  }
+  return null;
+}
+
 async function scrapeNational() {
   try {
     const res = await fetch(PROXY + 'https://www.tankerkoenig.de');
     const text = await res.text();
-    // Numbers appear BEFORE labels in Jina output
-    // Pattern: "## 2.397\n\nDiesel" or "## 2.210\n\nSuper" or "## 2.156\n\nSuper E10"
-    let dm = text.match(/([12]\.\d{3})\s*\n+\s*Diesel/);
-    let e10 = text.match(/([12]\.\d{3})\s*\n+\s*Super E10/);
-    let e5 = text.match(/([12]\.\d{3})\s*\n+\s*Super\s*\n/);
-    if (dm) national.diesel = parseFloat(dm[1]);
-    if (e5) national.e5 = parseFloat(e5[1]);
-    if (e10) national.e10 = parseFloat(e10[1]);
+    // Jina output changes formatting often, so accept multiple label/spacing variants.
+    const diesel = extractNationalPrice(text, [
+      /([12]\.\d{3})\s*\n+\s*Diesel/i,
+      /Diesel\s*[:\-]?\s*([12]\.\d{3})/i,
+    ]);
+    const e5 = extractNationalPrice(text, [
+      /([12]\.\d{3})\s*\n+\s*Super(?:\s+E5)?/i,
+      /Super(?:\s+E5)?\s*[:\-]?\s*([12]\.\d{3})/i,
+    ]);
+    const e10 = extractNationalPrice(text, [
+      /([12]\.\d{3})\s*\n+\s*Super\s*E10/i,
+      /Super\s*E10\s*[:\-]?\s*([12]\.\d{3})/i,
+    ]);
+
+    const nextNational = { diesel, e5, e10 };
+    const changed = Object.entries(nextNational).some(([key, value]) => value && national[key] !== value);
+
+    if (diesel) national.diesel = diesel;
+    if (e5) national.e5 = e5;
+    if (e10) national.e10 = e10;
+
     updateNationalDisplay();
-    recordToday(national.diesel, national.e5, national.e10);
+    if (changed) recordToday(national.diesel, national.e5, national.e10);
     updateChart();
     updateNatTimestamp();
-  } catch(e) { console.error('National scrape fail:', e); }
+  } catch(e) {
+    console.error('National scrape fail:', e);
+    setStatus('Nationalpreise konnten nicht geladen werden');
+  }
 }
 
 function updateNationalDisplay() {
