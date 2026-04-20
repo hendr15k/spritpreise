@@ -6,7 +6,7 @@
   <title>Spritpreise DE 🇩🇪 – Echte Live-Preise!</title>
   <meta name="description" content="Aktuelle Spritpreise für Deutschland in Echtzeit. Standortbasiert mit Preisalarm, Karte und 7-Tage-Trend.">
   <meta name="og:title" content="Spritpreise Deutschland 🇩🇪">
-  <meta name="og:description" content="Live-Tankstellenpreise via Tankerkönig API – mit Preisalarm, Karte und Trendverlauf.">
+  <meta name="og:description" content="Live-Tankstellenpreise via Tankerkönig API – mit Preisalarm, Karte, Trendverlauf & Favoriten.">
   <meta name="og:type" content="website">
   <meta name="og:url" content="https://hendr15k.github.io/spritpreise/">
   <meta name="twitter:card" content="summary">
@@ -69,6 +69,9 @@ h1{font-size:1.8rem;margin:0 0 8px}
 .history-status{font-size:.75rem;color:var(--muted);margin-top:4px}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#51cf66;color:#000;padding:10px 20px;border-radius:10px;font-weight:600;font-size:.9rem;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.show{opacity:1}
+.fav-btn{cursor:pointer;font-size:1rem;margin-left:6px;color:var(--acc);user-select:none}
+.fav-btn:hover{transform:scale(1.3)}
+.fav-station{background:rgba(110,168,255,.06);border-left:3px solid var(--acc)}
 @media(max-width:768px){.grid{grid-template-columns:1fr 1fr}.station-prices{flex-direction:column;gap:2px}.map-wrap{height:250px}}
   </style>
 </head>
@@ -226,6 +229,7 @@ function updateStatTimestamp() {
 const HISTORY_KEY = 'sprit_history';
 const LOCATION_KEY = 'sprit_location';
 const THRESHOLD_KEY = 'alarmThreshold';
+const FAVORITES_KEY = 'sprit_favorites';
 const HISTORY_DAYS = 7;
 
 function todayKey() {
@@ -483,9 +487,24 @@ async function fetchStations() {
   refreshTimer = setTimeout(fetchStations, 300000);
 }
 
+function loadFavorites() {
+  try { return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || []; } catch(e) { return []; }
+}
+function saveFavorites(favs) {
+  try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs)); } catch(e) {}
+}
+function toggleFavorite(id, ev) {
+  if (ev) ev.stopPropagation();
+  let favs = loadFavorites();
+  if (favs.includes(id)) { favs = favs.filter(f => f !== id); } else { favs.push(id); }
+  saveFavorites(favs);
+  renderStations();
+}
+
 function renderStations() {
   const fuelType = document.getElementById('fuelFilter').value;
   const sortBy = document.getElementById('sortBy').value;
+  const favs = loadFavorites();
   let list = [...stations];
   if (sortBy === 'price') {
     list.sort((a, b) => {
@@ -496,6 +515,10 @@ function renderStations() {
   } else {
     list.sort((a, b) => a.dist - b.dist);
   }
+  // Pin favorites to top
+  const favStations = list.filter(s => favs.includes(s.id));
+  const restStations = list.filter(s => !favs.includes(s.id));
+  list = [...favStations, ...restStations];
   let cheapestPrice = 99;
   list.forEach(s => {
     const p = fuelType === 'all' ? Math.min(s.diesel || 99, s.e5 || 99, s.e10 || 99) : (s[fuelType] || 99);
@@ -503,9 +526,10 @@ function renderStations() {
   });
   const html = list.map(s => {
     const isCheap = fuelType !== 'all' && s[fuelType] === cheapestPrice;
-    return `<div class="station" onclick="focusStation(${s.lat},${s.lng})">
+    const isFav = favs.includes(s.id);
+    return `<div class="station${isFav ? ' fav-station' : ''}" onclick="focusStation(${s.lat},${s.lng})">
       <div>
-        <div class="station-name">${isCheap ? '🏆 ' : ''}${s.name}</div>
+        <div class="station-name">${isCheap ? '🏆 ' : ''}${isFav ? '⭐ ' : ''}${s.name} <span class="fav-btn" onclick="toggleFavorite('${s.id}', event)" title="${isFav ? 'Favorit entfernen' : 'Als Favorit merken'}">${isFav ? '★' : '☆'}</span></div>
         <div class="station-addr">${s.street || ''} ${s.houseNumber || ''}, ${s.place || ''} • ${(s.dist / 1000).toFixed(1)}km ${s.isOpen ? '🟢' : '🔴'}</div>
       </div>
       <div class="station-prices">
