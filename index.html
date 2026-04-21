@@ -489,6 +489,7 @@ function configureApiKey() {
   }
   localStorage.setItem('tankerkoenig_api_key', trimmed);
   showToast('API-Key gespeichert');
+  fetchStations();
 }
 
 function applySavedPlace() {
