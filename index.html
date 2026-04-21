@@ -84,7 +84,6 @@ h1{font-size:1.8rem;margin:0 0 8px}
   <h1>🛢️ Spritpreise Deutschland <span class="live">● LIVE</span></h1>
   <p class="sub">Echte Preise via Tankerkönig API • Standortbasiert • Kein Abo nötig</p>
 
-  <div class="demo-banner" id="demoBanner">Demo-Modus — nationale Durchschnittspreise</div>
 
   <!-- Alarm -->
   <div class="alert" id="alarmBox">
@@ -158,7 +157,7 @@ h1{font-size:1.8rem;margin:0 0 8px}
 
   <!-- Station List -->
   <div class="card">
-    <h3>⛽ Tankstellen <span id="demoBadge" class="demo-badge">Demo</span> (<span id="stationCount">0</span>)</h3>
+    <h3>⛽ Tankstellen (<span id="stationCount">0</span>)</h3>
     <div id="stationList"><div style="text-align:center;color:var(--muted);padding:20px">📍 Standort → echte Preise laden</div></div>
   </div>
 
@@ -211,7 +210,6 @@ h1{font-size:1.8rem;margin:0 0 8px}
 <script>
 const API_KEY = '43b6d1db-4980-49b6-8492-49fd0d92e0fe';
 const PROXY = 'https://r.jina.ai/';
-const DEMO_MODE_KEY = 'sp_demo_mode';
 const NATIONAL_CACHE_KEY = 'sp_national_cache';
 const SAVED_PLACES = {
   home: { name: 'Zuhause', lat: 50.8592, lng: 6.3297, label: 'Jülich-Broich' },
@@ -221,7 +219,6 @@ let userLat = null, userLng = null, stations = [], map = null, markers = [];
 let national = {diesel: 0, e5: 0, e10: 0}, prevNational = {};
 let chart = null, refreshTimer = null;
 let lastAlarmStationId = null;
-let demoMode = localStorage.getItem(DEMO_MODE_KEY) === 'true';
 
 // ========== V10: Service Worker ==========
 if ('serviceWorker' in navigator) {
@@ -259,15 +256,6 @@ function todayKey() {
 
 function loadHistory() {
   try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || {}; } catch(e) { return {}; }
-}
-
-function setDemoMode(enabled) {
-  demoMode = !!enabled;
-  localStorage.setItem(DEMO_MODE_KEY, String(demoMode));
-  const banner = document.getElementById('demoBanner');
-  const badge = document.getElementById('demoBadge');
-  if (banner) banner.classList.toggle('show', demoMode);
-  if (badge) badge.classList.toggle('show', demoMode);
 }
 
 function loadNationalCache() {
@@ -517,23 +505,8 @@ function getLocation() {
 
 // ========== Fetch Stations ==========
 function configureApiKey() {
-  const current = API_KEY;
-  const key = prompt('Tankerkönig API-Key eingeben:', current);
-  if (key === null) return;
-  const trimmed = key.trim();
-  if (!trimmed) {
-    localStorage.removeItem('tankerkoenig_api_key');
-    setDemoMode(true);
-    stations = [];
-    renderStations();
-    updateCheapest();
-    showToast('API-Key entfernt');
-    setStatus('Demo-Modus aktiv');
-    return;
-  }
-  localStorage.setItem('tankerkoenig_api_key', trimmed);
-  showToast('API-Key gespeichert');
-  fetchStations();
+  showToast('Tankerkönig API-Key ist fest eingebaut');
+  setStatus('Built-in API-Key aktiv');
 }
 
 function applySavedPlace() {
@@ -555,11 +528,10 @@ async function fetchStations() {
   const liveApiKey = API_KEY;
   if (!liveApiKey) {
     stations = [];
-    setDemoMode(true);
     renderStations();
     updateCheapest();
     applyCachedNational(true);
-    setStatus('Demo-Modus: nationale Durchschnittspreise');
+    setStatus('Kein API-Key verfügbar');
     return;
   }
   setStatus('Lade Preise…');
@@ -576,7 +548,6 @@ async function fetchStations() {
         diesel: s.diesel, e5: s.e5, e10: s.e10,
         isOpen: s.isOpen, priceValidUntil: s.priceValidUntil
       }));
-      setDemoMode(false);
       renderStations();
       updateMap();
       updateCheapest();
@@ -584,19 +555,17 @@ async function fetchStations() {
       setStatus(`${stations.length} Stationen geladen`);
     } else {
       stations = [];
-      setDemoMode(true);
       renderStations();
       updateCheapest();
       applyCachedNational(true);
-      setStatus('Demo-Modus: ' + (data.message || 'API-Key ungültig'));
+      setStatus(data.message || 'API-Key ungültig');
     }
   } catch(e) {
     stations = [];
-    setDemoMode(true);
     renderStations();
     updateCheapest();
     applyCachedNational(true);
-    setStatus('Demo-Modus: ' + e.message);
+    setStatus('Fehler: ' + e.message);
   }
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(fetchStations, 300000);
@@ -618,9 +587,7 @@ function toggleFavorite(id, ev) {
 
 function renderStations() {
   const fuelType = document.getElementById('fuelFilter').value;
-  const emptyMessage = demoMode
-    ? '<div style="text-align:center;color:var(--muted);padding:20px">Demo aktiv – nutze oben die nationalen Durchschnittspreise oder setze per 🔑 einen gültigen API-Key für Live-Tankstellen.</div>'
-    : '<div style="text-align:center;color:var(--muted);padding:20px">Keine Stationen gefunden</div>';
+  const emptyMessage = '<div style="text-align:center;color:var(--muted);padding:20px">Keine Stationen gefunden</div>';
   const sortBy = document.getElementById('sortBy').value;
   const favs = loadFavorites();
   let list = [...stations];
@@ -667,7 +634,7 @@ function updateCheapest() {
     const fuelType = document.getElementById('fuelFilter').value === 'all' ? 'diesel' : document.getElementById('fuelFilter').value;
     const fallbackPrice = national[fuelType] || national.diesel || national.e5 || national.e10;
     document.getElementById('cheapestPrice').textContent = fallbackPrice ? fallbackPrice.toFixed(3) + ' €' : '--';
-    document.getElementById('cheapestName').textContent = demoMode ? 'Nationaler Durchschnitt' : '--';
+    document.getElementById('cheapestName').textContent = national[fuelType] || national.diesel || national.e5 || national.e10 ? 'Nationaler Durchschnitt' : '--';
     return;
   }
   const fuelType = document.getElementById('fuelFilter').value;
@@ -829,7 +796,6 @@ document.getElementById('calcPrice').oninput = calcUpdate;
     document.documentElement.classList.add('light-mode');
   }
   initThresholdUI();
-  setDemoMode(demoMode);
   applyCachedNational(true);
   updateChart();
 
@@ -842,8 +808,6 @@ document.getElementById('calcPrice').oninput = calcUpdate;
     document.getElementById('btnLocate').textContent = '📍 ' + userLat.toFixed(2) + '/' + userLng.toFixed(2);
     fetchStations();
     initMap();
-  } else if (!API_KEY && demoMode) {
-    setStatus('Demo-Modus aktiv');
   }
 
   scrapeNational();
