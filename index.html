@@ -117,6 +117,12 @@ h1{font-size:1.8rem;margin:0 0 8px}
       <input type="text" id="cityInput" placeholder="🏙️ Stadt suchen..." onkeypress="if(event.key==='Enter') searchCity()">
       <button class="btn" onclick="searchCity()">🔍</button>
     </div>
+    <select id="savedPlaces" onchange="applySavedPlace()">
+      <option value="">📌 Orte</option>
+      <option value="home">🏠 Zuhause</option>
+      <option value="fh">🏫 FH Aachen</option>
+    </select>
+    <button class="btn" onclick="configureApiKey()" title="Tankerkönig API-Key speichern">🔑 API-Key</button>
     <select id="fuelFilter" onchange="onFilterChange()">
       <option value="diesel">Diesel</option>
       <option value="e5">E5 Super</option>
@@ -196,8 +202,12 @@ h1{font-size:1.8rem;margin:0 0 8px}
   <div class="toast" id="toast"></div>
 
 <script>
-const API_KEY = '43b6d1db-4980-49b6-8492-49fd0d92e0fe';
+const API_KEY = new URLSearchParams(location.search).get('apikey') || localStorage.getItem('tankerkoenig_api_key') || '';
 const PROXY = 'https://r.jina.ai/';
+const SAVED_PLACES = {
+  home: { name: 'Zuhause', lat: 50.8592, lng: 6.3297, label: 'Jülich-Broich' },
+  fh: { name: 'FH Aachen', lat: 50.7786, lng: 6.0876, label: 'Eupener Straße, Aachen' }
+};
 let userLat = null, userLng = null, stations = [], map = null, markers = [];
 let national = {diesel: 0, e5: 0, e10: 0}, prevNational = {};
 let chart = null, refreshTimer = null;
@@ -456,11 +466,45 @@ function getLocation() {
 }
 
 // ========== Fetch Stations ==========
+function configureApiKey() {
+  const current = localStorage.getItem('tankerkoenig_api_key') || '';
+  const key = prompt('Tankerkönig API-Key eingeben:', current);
+  if (key === null) return;
+  const trimmed = key.trim();
+  if (!trimmed) {
+    localStorage.removeItem('tankerkoenig_api_key');
+    showToast('API-Key entfernt');
+    return;
+  }
+  localStorage.setItem('tankerkoenig_api_key', trimmed);
+  showToast('API-Key gespeichert');
+}
+
+function applySavedPlace() {
+  const value = document.getElementById('savedPlaces').value;
+  const place = SAVED_PLACES[value];
+  if (!place) return;
+  userLat = place.lat;
+  userLng = place.lng;
+  const cityInput = document.getElementById('cityInput');
+  if (cityInput) cityInput.value = place.label;
+  if (!map) initMap();
+  map.setView([userLat, userLng], 12);
+  fetchStations();
+  showToast(`${place.name} geladen`);
+}
+
 async function fetchStations() {
   if (!userLat || !userLng) return;
+  const liveApiKey = new URLSearchParams(location.search).get('apikey') || localStorage.getItem('tankerkoenig_api_key') || API_KEY;
+  if (!liveApiKey) {
+    setStatus('Kein Tankerkönig API-Key gesetzt');
+    showToast('Über 🔑 API-Key setzen');
+    return;
+  }
   setStatus('Lade Preise…');
   const rad = document.getElementById('radius').value;
-  const url = `https://creativecommons.tankerkoenig.de/json/list.php?lat=${userLat}&lng=${userLng}&rad=${rad}&sort=dist&type=all&apikey=${API_KEY}`;
+  const url = `https://creativecommons.tankerkoenig.de/json/list.php?lat=${userLat}&lng=${userLng}&rad=${rad}&sort=dist&type=all&apikey=${liveApiKey}`;
   try {
     const res = await fetch(url);
     const data = await res.json();

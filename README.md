@@ -26,12 +26,16 @@ Live-Spritpreise und Preisprognose für Deutschland. Zeigt aktuelle Tankstellenp
 
 ## Setup
 
-Benötigst einen [Tankerkönig API-Key](https://creativecommons.tankerkoenig.de/) für lokale Tankstellen:
+Benötigst einen [Tankerkönig API-Key](https://creativecommons.tankerkoenig.de/) für lokale Tankstellen.
 
-```html
-<!-- In index.html ersetzen: -->
-const API_KEY = 'DEIN_API_KEY';
-```
+**Neu:** Der Key ist nicht mehr hardcoded. Du kannst ihn setzen über:
+- die UI per **🔑 API-Key** Button
+- URL-Parameter `?apikey=DEIN_KEY`
+- `localStorage['tankerkoenig_api_key']`
+
+Zusätzlich gibt es Orts-Presets für:
+- 🏠 Zuhause (Jülich-Broich)
+- 🏫 FH Aachen (Eupener Straße)
 
 Nationale Durchschnitte funktionieren auch ohne API-Key über Jina AI Scraping.
 
