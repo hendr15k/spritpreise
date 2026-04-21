@@ -209,7 +209,7 @@ h1{font-size:1.8rem;margin:0 0 8px}
   <div class="toast" id="toast"></div>
 
 <script>
-const API_KEY = new URLSearchParams(location.search).get('apikey') || localStorage.getItem('tankerkoenig_api_key') || '';
+const API_KEY = '43b6d1db-4980-49b6-8492-49fd0d92e0fe';
 const PROXY = 'https://r.jina.ai/';
 const DEMO_MODE_KEY = 'sp_demo_mode';
 const NATIONAL_CACHE_KEY = 'sp_national_cache';
@@ -517,7 +517,7 @@ function getLocation() {
 
 // ========== Fetch Stations ==========
 function configureApiKey() {
-  const current = localStorage.getItem('tankerkoenig_api_key') || '';
+  const current = API_KEY;
   const key = prompt('Tankerkönig API-Key eingeben:', current);
   if (key === null) return;
   const trimmed = key.trim();
@@ -552,7 +552,7 @@ function applySavedPlace() {
 
 async function fetchStations() {
   if (!userLat || !userLng) return;
-  const liveApiKey = new URLSearchParams(location.search).get('apikey') || localStorage.getItem('tankerkoenig_api_key') || API_KEY;
+  const liveApiKey = API_KEY;
   if (!liveApiKey) {
     stations = [];
     setDemoMode(true);
