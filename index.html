@@ -88,6 +88,7 @@ h1{font-size:1.8rem;margin:0 0 8px}
 
   <!-- National Averages -->
   <div class="grid" id="nationalGrid">
+    <div class="last-update" id="natTimestamp" style="grid-column:1/-1;text-align:center;font-size:.7rem;margin-top:-4px"></div>
     <div class="card">
       <h3>🇩🇪 Diesel</h3>
       <div class="price" id="avgDiesel">lädt…</div>
@@ -410,6 +411,16 @@ function updateNationalDisplay() {
   if (prevNational.e5) showTrend('E5', national.e5, prevNational.e5);
   if (prevNational.e10) showTrend('E10', national.e10, prevNational.e10);
   prevNational = { ...national };
+  updateNatTimestamp();
+}
+
+function updateNatTimestamp() {
+  const el = document.getElementById('natTimestamp');
+  if (!el) return;
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  el.textContent = `Aktualisiert: ${hh}:${mm}`;
 }
 
 function showTrend(type, curr, prev) {
